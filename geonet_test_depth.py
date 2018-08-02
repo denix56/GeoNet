@@ -26,6 +26,8 @@ def test_depth(opt):
 
     ##### Go #####
     with tf.Session(config=config) as sess:
+        meta_path = '%s.meta' % opt.init_ckpt_file
+        saver = tf.train.import_meta_graph(meta_path)
         saver.restore(sess, opt.init_ckpt_file)
         pred_all = []
         for t in range(0, len(test_files), opt.batch_size):
