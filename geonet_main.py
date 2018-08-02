@@ -144,14 +144,20 @@ def train():
 
 def main(_):
 
-    opt.num_source = opt.seq_length - 1
-    opt.num_scales = 4
-
-    opt.add_flownet = opt.mode in ['train_flow', 'test_flow']
-    opt.add_dispnet = opt.add_flownet and opt.flownet_type == 'residual' \
+    tf.app.flags.DEFINE_integer('num_source', opt.seq_length - 1, """Number of sources""")
+    tf.app.flags.DEFINE_integer('num_scales', 4, """Number of scales""")
+    
+    add_flownet = opt.mode in ['train_flow', 'test_flow']
+    add_dispnet = add_flownet and opt.flownet_type == 'residual' \
                       or opt.mode in ['train_rigid', 'test_depth']
-    opt.add_posenet = opt.add_flownet and opt.flownet_type == 'residual' \
+    add_posenet = add_flownet and opt.flownet_type == 'residual' \
                       or opt.mode in ['train_rigid', 'test_pose']
+    
+    tf.app.flags.DEFINE_boolean('add_flownet', add_flownet, """add_flownet""")
+    tf.app.flags.DEFINE_boolean('add_dispnet', add_dispnet, """add_dispnet""")
+    tf.app.flags.DEFINE_boolean('add_posenet', add_posenet, """add_posenet""")
+
+    
 
     if opt.mode in ['train_rigid', 'train_flow']:
         train()
