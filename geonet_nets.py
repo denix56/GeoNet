@@ -122,10 +122,10 @@ def build_resnet50(inputs, get_pred, is_training, var_scope):
                             activation_fn=tf.nn.relu):
             conv1 = conv(inputs, 64, 7, 2) # H/2  -   64D
             pool1 = maxpool(conv1,           3) # H/4  -   64D
-            conv2 = resblock(pool1,      64, 3) # H/8  -  256D
-            conv3 = resblock(conv2,     128, 4) # H/16 -  512D
-            conv4 = resblock(conv3,     256, 6) # H/32 - 1024D
-            conv5 = resblock(conv4,     512, 3) # H/64 - 2048D
+            conv2 = resnextblock(pool1,      128, 3, 32) # H/8  -  256D
+            conv3 = resblock(conv2,     256, 4, 32) # H/16 -  512D
+            conv4 = resblock(conv3,     512, 6, 32) # H/32 - 1024D
+            conv5 = resblock(conv4,     1024, 3, 32) # H/64 - 2048D
 
             skip1 = conv1
             skip2 = pool1
@@ -224,11 +224,53 @@ def resconv(x, num_layers, stride):
         shortcut = x
     return tf.nn.relu(conv3 + shortcut)
 
+def resnextconv(x, num_layers, stride, cardinality):
+    # Actually here exists a bug: tf.shape(x)[3] != num_layers is always true,
+    # but we preserve it here for consistency with Godard's implementation.
+    do_proj = tf.shape(x)[3] != num_layers or stride == 2
+    shortcut = []
+
+    residual = x
+
+    residual_merge = []
+    step = num_layers / cardinality
+    start_dim = 0
+    for i in range(cardinality):
+        with tf.variable_scope('conv2_%d' % (i + 1)) as local_sc:
+            end_dim = round(step * (i + 1))
+            dim_num = end_dim - start_dim
+            part_residual = tf.slice(residual,
+                                     [0, 0, 0, start_dim], [-1, -1, -1, dim_num])
+
+            conv1 = conv(part_residual, dim_num, 1, 1)
+            conv2 = conv(conv1, dim_num, 3, 3)
+            conv3 = conv(conv2, 2*dim_num, 1, 1, None)
+            if i == 0:
+                residual_merge = conv3
+            else:
+                residual_merge = tf.concat([residual_merge, conv3], 3)
+
+            start_dim = end_dim
+
+    if do_proj:
+        shortcut = conv(x, 2 * num_layers, 1, stride, None)
+    else:
+        shortcut = x
+    return tf.nn.relu(conv3 + shortcut)
+
+
 def resblock(x, num_layers, num_blocks):
     out = x
     for i in range(num_blocks - 1):
         out = resconv(out, num_layers, 1)
     out = resconv(out, num_layers, 2)
+    return out
+
+def resnextblock(x, num_layers, num_blocks, cardinality):
+    out = x
+    for i in range(num_blocks - 1):
+        out = resnexconv(out, num_layers, 1, cardinality)
+    out = resconv(out, num_layers, 2, cardinality)
     return out
 
 # def resconv(x, num_layers, stride):
